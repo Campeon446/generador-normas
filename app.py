@@ -229,23 +229,3 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-"""
-
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/api/procesos', methods=['GET'])
-def get_procesos():
-    return jsonify(cargar_procesos())
-
-@app.route('/api/procesos', methods=['POST'])
-def add_proceso():
-    procesos = cargar_procesos()
-    nuevo = request.json
-    procesos.append(nuevo)
-    guardar_procesos(procesos)
-    return jsonify({"status": "success"})
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
