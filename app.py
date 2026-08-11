@@ -1,231 +1,213 @@
-from flask import Flask, jsonify, request, render_template_string
-import json
+import streamlit as st
 import os
+from google import genai
+from audio_recorder_streamlit import audio_recorder
+from docx import Document
+import io
 
-app = Flask(__name__)
-DATA_FILE = 'manual_procedimientos.json'
+st.set_page_config(page_title="Generador de Normas y Procedimientos Oficiales", layout="wide")
 
-def cargar_procesos():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return [
-        {
-            "id": "PROC-001",
-            "nombre": "Gestión y Seguimiento de Expedientes",
-            "objetivo": "Estandarizar el circuito interdepartamental de radicación y pase documental.",
-            "responsable": "Oficial de Trámite",
-            "pasos": ["1. Recepción de documento.", "2. Control técnico.", "3. Derivación."],
-            "flujo": [
-                {"tipo": "inicio", "sector": "Mesa de Entradas", "desc": "Recepción de solicitud / Expediente físico o digital."},
-                {"tipo": "decision", "sector": "Área de Control", "desc": "¿Cumple requisitos reglamentarios y normativos?"},
-                {"tipo": "proceso", "sector": "Gerencia", "desc": "Firma de resolución y autorización de pase."},
-                {"tipo": "fin", "sector": "Despacho", "desc": "Notificación a partes y archivo definitivo."}
-            ]
-        }
-    ]
+# ==========================================
+# SISTEMA DE AUTENTICACIÓN (LOGIN)
+# ==========================================
+def verificar_password():
+    if "autenticado" not in st.session_state:
+        st.session_state["autenticado"] = False
 
-def guardar_procesos(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    if st.session_state["autenticado"]:
+        return True
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Gestor de Procedimientos y Flujograma Administrativo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-50 text-slate-800 min-h-screen p-6">
-    <div class="max-w-6xl mx-auto space-y-6">
-        <header class="bg-sky-900 text-white p-6 rounded-2xl shadow-md flex justify-between items-center">
-            <div>
-                <h1 class="text-2xl font-black">Manual y Flujograma Administrativo</h1>
-                <p class="text-xs text-sky-200 mt-1">Diagramas de flujo estandarizados y trazabilidad entre sectores</p>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="document.getElementById('modal-voz').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow">
-                    🎙️ Asistente de Audio a Técnico
-                </button>
-                <button onclick="document.getElementById('modal-nuevo').classList.remove('hidden')" class="bg-sky-700 hover:bg-sky-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow">
-                    + Registrar Proceso
-                </button>
-            </div>
-        </header>
+    st.title("🔒 Acceso Restringido - Generador de Normas")
+    st.markdown("Este sistema maneja información confidencial. Por favor, ingrese la contraseña de acceso.")
+    
+    with st.form("login_form"):
+        password_ingresada = st.text_input("Contraseña de Acceso", type="password")
+        submit_login = st.form_submit_button("Ingresar")
+        
+        if submit_login:
+            CONTRASENA_VALIDA = "Admin2026*" 
+            if password_ingresada == CONTRASENA_VALIDA:
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Contraseña incorrecta. Acceso denegado.")
+    return False
 
-        <!-- Listado de Procesos -->
-        <div id="procesos-grid" class="grid grid-cols-1 gap-6"></div>
-    </div>
+if not verificar_password():
+    st.stop()
 
-    <!-- MODAL: ASISTENTE DE AUDIO -->
-    <div id="modal-voz" class="hidden fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 class="text-lg font-bold text-slate-800">Procesar Grabación de Entrevista</h3>
-            <p class="text-xs text-slate-500">Sube el audio de la reunión para generar el flujograma y el texto técnico automáticamente.</p>
-            <div class="space-y-3 text-xs">
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Archivo de Audio</label>
-                    <input type="file" id="audio-file" accept="audio/*" class="w-full bg-slate-50 border rounded p-2 text-xs">
-                </div>
-                <button type="button" onclick="procesarAudio()" class="w-full py-2.5 bg-emerald-600 text-white font-bold rounded-xl shadow">
-                    ⚡ Generar Flujograma desde Audio
-                </button>
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Resultado Generado</label>
-                    <textarea id="resultado-audio-tecnico" rows="6" class="w-full bg-slate-900 text-emerald-400 font-mono text-[11px] rounded p-3" readonly></textarea>
-                </div>
-            </div>
-            <div class="flex justify-end pt-2 border-t">
-                <button type="button" onclick="document.getElementById('modal-voz').classList.add('hidden')" class="px-5 py-2 border rounded-xl font-bold text-xs">Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: NUEVO PROCESO -->
-    <div id="modal-nuevo" class="hidden fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50">
-        <form onsubmit="guardarProceso(event)" class="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 class="text-lg font-bold text-slate-800">Nuevo Proceso con Flujograma</h3>
-            <div class="space-y-3 text-xs">
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Código (Ej. PROC-002)</label>
-                    <input type="text" id="p-id" required class="w-full bg-slate-50 border rounded p-2">
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Nombre del Proceso</label>
-                    <input type="text" id="p-nombre" required class="w-full bg-slate-50 border rounded p-2">
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Objetivo General</label>
-                    <textarea id="p-objetivo" rows="2" required class="w-full bg-slate-50 border rounded p-2"></textarea>
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Área Propietaria</label>
-                    <input type="text" id="p-responsable" required class="w-full bg-slate-50 border rounded p-2">
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-500 mb-1">Pasos Operativos (un paso por línea)</label>
-                    <textarea id="p-pasos" rows="3" required class="w-full bg-slate-50 border rounded p-2"></textarea>
-                </div>
-            </div>
-            <div class="flex gap-2 pt-2 border-t">
-                <button type="button" onclick="document.getElementById('modal-nuevo').classList.add('hidden')" class="w-1/2 py-2 border rounded-xl font-bold text-xs">Cancelar</button>
-                <button type="submit" class="w-1/2 py-2 bg-sky-800 text-white font-bold rounded-xl text-xs shadow">Guardar Proceso</button>
-            </div>
-        </form>
-    </div>
-
-    <script>
-        async function cargarProcesos() {
-            const res = await fetch('/api/procesos');
-            const data = await res.json();
-            const grid = document.getElementById('procesos-grid');
+# ==========================================
+# FUNCIÓN AUXILIAR PARA CREAR ARCHIVO WORD
+# ==========================================
+def crear_documento_word(texto_norma):
+    doc = Document()
+    doc.add_heading("NORMA Y PROCEDIMIENTO OFICIAL", level=0)
+    
+    for linea in texto_norma.split("\n"):
+        linea_limpia = linea.strip()
+        if linea_limpia.startswith("# "):
+            doc.add_heading(linea_limpia.replace("# ", ""), level=1)
+        elif linea_limpia.startswith("## "):
+            doc.add_heading(linea_limpia.replace("## ", ""), level=2)
+        elif linea_limpia.startswith("### "):
+            doc.add_heading(linea_limpia.replace("### ", ""), level=3)
+        elif linea_limpia.startswith("- ") or linea_limpia.startswith("* "):
+            doc.add_paragraph(linea_limpia.replace("- ", "").replace("* ", ""), style='List Bullet')
+        elif linea_limpia:
+            doc.add_paragraph(linea_limpia)
             
-            grid.innerHTML = data.map(p => `
-                <div class="bg-white p-6 rounded-2xl border shadow-sm space-y-5">
-                    <div class="flex justify-between items-start border-b pb-3">
-                        <div>
-                            <span class="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded">${p.id}</span>
-                            <h3 class="font-black text-lg text-slate-800 mt-1">${p.nombre}</h3>
-                            <p class="text-xs text-slate-600 italic mt-0.5">${p.objetivo}</p>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-xs text-slate-400 font-semibold block">Propietario:</span>
-                            <span class="text-xs font-bold text-sky-900">${p.responsable}</span>
-                        </div>
-                    </div>
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                        <!-- Descripción Operativa -->
-                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
-                            <p class="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Descripción Operativa:</p>
-                            <ul class="list-disc list-inside text-slate-600 space-y-1">
-                                ${Array.isArray(p.pasos) ? p.pasos.map(paso => `<li>${paso}</li>`).join('') : `<li>${p.pasos}</li>`}
-                            </ul>
-                        </div>
+# ==========================================
+# APLICACIÓN PRINCIPAL
+# ==========================================
+st.title("🏛️ Generador de Normas y Procedimientos con Exportación a Word")
+st.markdown("Describa el proceso mediante texto o voz. La IA generará la norma oficial y podrás descargarla directamente en Word.")
 
-                        <!-- Flujograma Administrativo Gráfico -->
-                        <div class="bg-sky-50/40 p-4 rounded-xl border border-sky-100 space-y-3">
-                            <p class="font-bold text-sky-900 uppercase tracking-wider text-[10px]">Flujograma Administrativo:</p>
-                            <div class="space-y-2">
-                                ${(p.flujo || []).map((f, idx, arr) => {
-                                    // Estilos según la simbología administrativa (Inicio/Fin, Decisión, Proceso)
-                                    let shapeStyle = "bg-white border-sky-300 rounded-lg"; // Proceso estándar
-                                    let badgeColor = "bg-sky-100 text-sky-800";
-                                    let icon = "📄";
+with st.sidebar:
+    st.header("Seguridad y Configuración")
+    if st.button("Cerrar Sesión"):
+        st.session_state["autenticado"] = False
+        st.rerun()
+        
+    st.divider()
+    st.header("Configuración de IA")
+    api_key_input = st.text_input("Ingrese su Google Gemini API Key", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
+    st.markdown("*(Obténgala gratis en Google AI Studio)*")
 
-                                    if(f.tipo === 'inicio') {
-                                        shapeStyle = "bg-emerald-50 border-emerald-300 rounded-full text-center";
-                                        badgeColor = "bg-emerald-100 text-emerald-800";
-                                        icon = "🟢";
-                                    } else if(f.tipo === 'decision') {
-                                        shapeStyle = "bg-amber-50 border-amber-300 rotate-0 rounded-xl"; // Simula compuerta de decisión
-                                        badgeColor = "bg-amber-100 text-amber-800";
-                                        icon = "⚖️";
-                                    } else if(f.tipo === 'fin') {
-                                        shapeStyle = "bg-rose-50 border-rose-300 rounded-full text-center";
-                                        badgeColor = "bg-rose-100 text-rose-800";
-                                        icon = "🔴";
-                                    }
+with st.form("norma_form"):
+    st.subheader("1. Datos Generales de la Norma")
+    c1, c2 = st.columns(2)
+    with c1:
+        titulo_norma = st.text_input("Título de la Norma / Procedimiento", placeholder="Ej: NORMA PARA EL OTORGAMIENTO DE CRÉDITOS...")
+        area_emisora = st.text_input("Área Emisora", placeholder="Ej: Gerencia Económico Financiera")
+    with c2:
+        aprobacion_ref = st.text_input("Referencia de Aprobación", placeholder="Ej: Res (D) N° XXXXX")
+        edicion_num = st.text_input("Edición / Versión", value="1")
+    
+    st.subheader("2. Método de Entrada de Información")
+    tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar audio con micrófono"])
+    
+    descripcion_libre = ""
+    audio_bytes = None
+    
+    if tipo_entrada == "Escribir texto":
+        descripcion_libre = st.text_area(
+            "Describa los lineamientos, etapas, plazos o el proceso a normalizar:",
+            height=150,
+            placeholder="Ej: Describa las reglas para el otorgamiento de créditos, plazos de pago..."
+        )
+    else:
+        st.markdown("Presione el botón del micrófono para comenzar a hablar y vuelva a presionarlo para detener:")
+        audio_bytes = audio_recorder(text="Presione para grabar", recording_color="#e80000", neutral_color="#6aa36f", icon_size="2x")
+        if audio_bytes:
+            st.success("¡Audio grabado correctamente!")
 
-                                    return `
-                                        <div class="${shapeStyle} p-3 border shadow-sm text-xs relative">
-                                            <div class="flex justify-between items-center font-bold text-[10px] border-b border-slate-100 pb-1 mb-1">
-                                                <span class="${badgeColor} px-1.5 py-0.5 rounded">${icon} ${f.sector}</span>
-                                                <span class="text-slate-400 uppercase">${f.tipo || 'proceso'}</span>
-                                            </div>
-                                            <p class="text-slate-700 font-medium">${f.desc}</p>
-                                        </div>
-                                        ${idx < arr.length - 1 ? '<div class="text-center text-sky-400 font-bold text-sm leading-none my-0.5">↓</div>' : ''}
-                                    `;
-                                }).join('')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
+    submitted = st.form_submit_button("📜 Generar Norma Oficial y Diagrama")
 
-        function procesarAudio() {
-            const fileInput = document.getElementById('audio-file');
-            if(fileInput.files.length === 0) {
-                alert("Selecciona un archivo de audio primero.");
-                return;
-            }
-            document.getElementById('resultado-audio-tecnico').value = `[FLUJOGRAMA GENERADO EXITOSAMENTE DESDE AUDIO]
-- INICIO: Recepción de documentación en sector origen.
-- DECISIÓN [Control]: ¿Documentación conforme a normativa? (Sí / No).
-- PROCESO [Área Técnica]: Emisión de dictamen y pase digital.
-- FIN [Dirección]: Cierre administrativo y notificación.`;
-        }
+if submitted:
+    if not titulo_norma:
+        st.error("Por favor, ingrese el Título de la Norma.")
+    elif tipo_entrada == "Escribir texto" and not descripcion_libre:
+        st.error("Por favor, ingrese la descripción escrita del proceso.")
+    elif tipo_entrada == "Grabar audio con micrófono" and not audio_bytes:
+        st.error("Por favor, grabe un audio antes de enviar el formulario.")
+    elif not api_key_input:
+        st.error("Por favor, ingrese su API Key de Google Gemini en la barra lateral.")
+    else:
+        with st.spinner("Procesando información y generando la norma oficial..."):
+            try:
+                client = genai.Client(api_key=api_key_input)
+                
+                if tipo_entrada == "Grabar audio con micrófono":
+                    contenido_prompt = [
+                        {
+                            "mime_type": "audio/wav",
+                            "data": audio_bytes
+                        },
+                        f"Escucha este audio que describe un procedimiento. Redacta la norma titulada '{titulo_norma}' del área '{area_emisora}'."
+                    ]
+                else:
+                    contenido_prompt = f"Toma la siguiente descripción operativa escrita:\n{descripcion_libre}"
 
-        async function guardarProceso(e) {
-            e.preventDefault();
-            const nuevo = {
-                id: document.getElementById('p-id').value,
-                nombre: document.getElementById('p-nombre').value,
-                objetivo: document.getElementById('p-objetivo').value,
-                responsable: document.getElementById('p-responsable').value,
-                pasos: document.getElementById('p-pasos').value.split('\\n'),
-                flujo: [
-                    {tipo: "inicio", sector: "Oficina Origen", desc: "Recepción e ingreso formal del trámite."},
-                    {tipo: "decision", sector: "Control Normativo", desc: "¿Verificación de requisitos cumplida?"},
-                    {tipo: "proceso", sector: "Área Ejecutora", desc: "Tramitación y carga en sistema."},
-                    {tipo: "fin", sector: "Gerencia / Archivo", desc: "Aprobación final y cierre de circuito."}
-                ]
-            };
+                prompt_sistema = f"""
+                Eres un analista experto en normalización de procesos corporativos e institucionales (estilo ANCAP / administración pública).
+                Debes redactar un documento formal basándote en:
+                - Título: {titulo_norma}
+                - Área Emisora: {area_emisora}
+                - Referencia de Aprobación: {aprobacion_ref}
+                - Edición: {edicion_num}
+                
+                El documento DEBE estructurarse estrictamente con el siguiente formato y orden jerárquico:
+                1. Encabezado de Control
+                2. Estructura obligatoria por secciones numéricas:
+                   - 1. OBJETIVO
+                   - 2. ALCANCE
+                   - 3. DOCUMENTOS DE REFERENCIA
+                   - 4. GLOSARIO
+                   - 5. ÁMBITO DE APLICACIÓN
+                   - 6. DESCRIPCIÓN (desarrollada de forma decimal estricta: 6.1, 6.1.1, i, ii, 6.2, etc.).
+                
+                3. Adicionalmente, incluye al final un diagrama de flujo en sintaxis **Mermaid.js** (`flowchart TD`) con la simbología técnica correcta (óvalos inicio/fin, rectángulos actividades, rombos decisiones de Sí/No).
+                
+                Separa la salida en dos bloques exactos:
+                --- NORMA ---
+                (Aquí redacta todo el texto del documento en Markdown limpio).
+                --- MERMAID ---
+                (Aquí coloca únicamente el código puro para Mermaid empezando con flowchart TD).
+                """
+                
+                if tipo_entrada == "Grabar audio con micrófono":
+                    contents_to_send = [prompt_sistema, contenido_prompt[0], contenido_prompt[1]]
+                else:
+                    contents_to_send = [prompt_sistema + "\n\n" + contenido_prompt]
 
-            await fetch('/api/procesos', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(nuevo)
-            });
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash-lite',
+                    contents=contents_to_send,
+                )
+                
+                texto_respuesta = response.text
+                
+                if "--- NORMA ---" in texto_respuesta and "--- MERMAID ---" in texto_respuesta:
+                    partes = texto_respuesta.split("--- MERMAID ---")
+                    norma_generada = partes[0].replace("--- NORMA ---", "").strip()
+                    mermaid_generado = partes[1].replace("```mermaid", "").replace("```", "").strip()
+                else:
+                    norma_generada = texto_respuesta
+                    mermaid_generado = "flowchart TD\n    Start([Inicio]) --> P1[Proceso Principal] --> End([Fin])"
 
-            document.getElementById('modal-nuevo').classList.add('hidden');
-            cargarProcesos();
-        }
+                st.success("¡Norma oficial generada con éxito!")
+                
+                st.session_state["norma_generada"] = norma_generada
+                st.session_state["mermaid_generado"] = mermaid_generado
+                st.session_state["titulo_norma"] = titulo_norma
 
-        cargarProcesos();
-    </script>
-</body>
-</html>
+            except Exception as e:
+                st.error(f"Ocurrió un error al procesar la solicitud: {e}")
+
+# ==========================================
+# MOSTRAR RESULTADOS
+# ==========================================
+if "norma_generada" in st.session_state:
+    st.divider()
+    st.header("📄 Documento Oficial de la Norma")
+    st.markdown(st.session_state["norma_generada"])
+    
+    archivo_word = crear_documento_word(st.session_state["norma_generada"])
+    nombre_archivo = f"{st.session_state['titulo_norma'].replace(' ', '_')}.docx"
+    
+    st.download_button(
+        label="📥 Descargar Documento en formato Word (.docx)",
+        data=archivo_word,
+        file_name=nombre_archivo,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    
+    st.divider()
+    st.header("📊 Diagrama de Flujo del Procedimiento")
+    st.markdown("Representación gráfica basada en la normativa generada:")
+    st.markdown(f"```mermaid\n{st.session_state['mermaid_generado']}\n```")
