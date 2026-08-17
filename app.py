@@ -75,7 +75,7 @@ with st.sidebar:
         
     st.divider()
     st.header("Configuración de IA")
-    api_key_input = st.text_input("Ingrese su Google Gemini API Key", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
+   api_key_input = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
     st.markdown("*(Obténgala gratis en Google AI Studio)*")
 
 with st.form("norma_form"):
