@@ -82,14 +82,14 @@ with st.sidebar:
 st.subheader("1. Datos Generales de la Norma")
 c1, c2 = st.columns(2)
 with c1:
-    titulo_norma = st.text_input("Título de la Norma / Procedimiento", placeholder="Ej: NORMA PARA EL OTORGAMIENTO DE CRÉDITOS...")
-    area_emisora = st.text_input("Área Emisora", placeholder="Ej: Gerencia Económico Financiera")
+    titulo_norma = st.text_input("Título de la Norma / Procedimiento", placeholder="Ej: NORMA PARA EL OTORGAMIENTO DE CRÉDITOS...", key="k_titulo")
+    area_emisora = st.text_input("Área Emisora", placeholder="Ej: Gerencia Económico Financiera", key="k_area")
 with c2:
-    aprobacion_ref = st.text_input("Referencia de Aprobación", placeholder="Ej: Res (D) N° XXXXX")
-    edicion_num = st.text_input("Edición / Versión", value="1")
+    aprobacion_ref = st.text_input("Referencia de Aprobación", placeholder="Ej: Res (D) N° XXXXX", key="k_ref")
+    edicion_num = st.text_input("Edición / Versión", value="1", key="k_edicion")
 
 st.subheader("2. Método de Entrada de Información")
-tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar / Subir Audio"])
+tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar / Subir Audio"], key="k_tipo")
 
 descripcion_libre = ""
 audio_bytes = None
@@ -99,7 +99,8 @@ if tipo_entrada == "Escribir texto":
     descripcion_libre = st.text_area(
         "Describa los lineamientos, etapas, plazos o el proceso a normalizar:",
         height=150,
-        placeholder="Ej: Describa las reglas para el otorgamiento de créditos..."
+        placeholder="Ej: Describa las reglas para el otorgamiento de créditos...",
+        key="k_desc"
     )
 else:
     st.markdown("🔊 **Opción A: Grabar ahora en la PC** (Si la red lo permite, presione el ícono de micrófono)")
@@ -108,7 +109,6 @@ else:
     st.markdown("📂 **Opción B: Subir un archivo de voz** (Recomendado - Sube audios de WhatsApp, celular o grabadora)")
     audio_subido = st.file_uploader("Suba un archivo de audio (.mp3, .wav, .m4a)", type=["wav", "mp3", "m4a", "ogg"])
     
-    # Guardamos el archivo y su formato dependiendo de lo que elija el usuario
     if audio_grabado:
         audio_bytes = audio_grabado
         mime_type = "audio/wav"
@@ -179,7 +179,7 @@ if submitted:
                     contents_to_send = [prompt_sistema + "\n\n" + contenido_prompt]
 
                 response = client.models.generate_content(
-                    model='gemini-3.5-flash-lite',
+                    model='gemini-2.5-flash-lite',
                     contents=contents_to_send,
                 )
                 
@@ -225,10 +225,15 @@ if "norma_generada" in st.session_state:
     st.markdown("Representación gráfica basada en la normativa generada:")
     st.markdown(f"```mermaid\n{st.session_state['mermaid_generado']}\n```")
     
-    # --- NUEVO BOTÓN DE REINICIO ---
+    # --- NUEVO BOTÓN DE REINICIO QUE VACÍA TODO ---
     st.divider()
     if st.button("🔄 Comenzar Nuevo Procedimiento"):
-        for key in ["norma_generada", "mermaid_generado", "titulo_norma"]:
+        # Lista de todas las variables guardadas (resultados y cajas de texto)
+        variables_a_limpiar = [
+            "norma_generada", "mermaid_generado", "titulo_norma",
+            "k_titulo", "k_area", "k_ref", "k_desc"
+        ]
+        for key in variables_a_limpiar:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
