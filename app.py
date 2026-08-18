@@ -228,12 +228,16 @@ if "norma_generada" in st.session_state:
     # --- NUEVO BOTÓN DE REINICIO QUE VACÍA TODO ---
     st.divider()
     if st.button("🔄 Comenzar Nuevo Procedimiento"):
-        # Lista de todas las variables guardadas (resultados y cajas de texto)
-        variables_a_limpiar = [
-            "norma_generada", "mermaid_generado", "titulo_norma",
-            "k_titulo", "k_area", "k_ref", "k_desc"
-        ]
-        for key in variables_a_limpiar:
+        # 1. Borramos los documentos y diagramas generados
+        for key in ["norma_generada", "mermaid_generado", "titulo_norma"]:
             if key in st.session_state:
                 del st.session_state[key]
+        
+        # 2. Forzamos que las cajas de texto queden totalmente en blanco
+        st.session_state["k_titulo"] = ""
+        st.session_state["k_area"] = ""
+        st.session_state["k_ref"] = ""
+        st.session_state["k_edicion"] = "1"
+        st.session_state["k_desc"] = ""
+        
         st.rerun()
