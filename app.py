@@ -179,7 +179,7 @@ if submitted:
                     contents_to_send = [prompt_sistema + "\n\n" + contenido_prompt]
 
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash-lite',
+                    model='gemini-3.5-flash-lite',
                     contents=contents_to_send,
                 )
                 
