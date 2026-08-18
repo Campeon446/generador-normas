@@ -75,51 +75,51 @@ with st.sidebar:
         
     st.divider()
     st.header("Configuración de IA")
-    # Quitamos la caja de texto y cargamos la API directamente desde los Secretos que configuraste en la nube
     st.success("✅ Conexión con Inteligencia Artificial activada de forma segura.")
     api_key_input = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
-with st.form("norma_form"):
-    st.subheader("1. Datos Generales de la Norma")
-    c1, c2 = st.columns(2)
-    with c1:
-        titulo_norma = st.text_input("Título de la Norma / Procedimiento", placeholder="Ej: NORMA PARA EL OTORGAMIENTO DE CRÉDITOS...")
-        area_emisora = st.text_input("Área Emisora", placeholder="Ej: Gerencia Económico Financiera")
-    with c2:
-        aprobacion_ref = st.text_input("Referencia de Aprobación", placeholder="Ej: Res (D) N° XXXXX")
-        edicion_num = st.text_input("Edición / Versión", value="1")
-    
-    st.subheader("2. Método de Entrada de Información")
-    tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar / Subir Audio"])
-    
-    descripcion_libre = ""
-    audio_bytes = None
-    mime_type = None
-    
-    if tipo_entrada == "Escribir texto":
-        descripcion_libre = st.text_area(
-            "Describa los lineamientos, etapas, plazos o el proceso a normalizar:",
-            height=150,
-            placeholder="Ej: Describa las reglas para el otorgamiento de créditos..."
-        )
-    else:
-        st.markdown("🔊 **Opción A: Grabar ahora en la PC** (Si la red lo permite, presione el ícono de micrófono)")
-        audio_grabado = audio_recorder(text="Presionar para grabar", recording_color="#e80000", neutral_color="#6aa36f", icon_size="2x")
-        
-        st.markdown("📂 **Opción B: Subir un archivo de voz** (Recomendado - Sube audios de WhatsApp, celular o grabadora)")
-        audio_subido = st.file_uploader("Suba un archivo de audio (.mp3, .wav, .m4a)", type=["wav", "mp3", "m4a", "ogg"])
-        
-        # Guardamos el archivo y su formato dependiendo de lo que elija el usuario
-        if audio_grabado:
-            audio_bytes = audio_grabado
-            mime_type = "audio/wav"
-            st.success("¡Audio grabado en vivo correctamente!")
-        elif audio_subido:
-            audio_bytes = audio_subido.read()
-            mime_type = audio_subido.type
-            st.success("¡Archivo de audio cargado correctamente!")
+# --- FORMULARIO DINÁMICO ---
+st.subheader("1. Datos Generales de la Norma")
+c1, c2 = st.columns(2)
+with c1:
+    titulo_norma = st.text_input("Título de la Norma / Procedimiento", placeholder="Ej: NORMA PARA EL OTORGAMIENTO DE CRÉDITOS...")
+    area_emisora = st.text_input("Área Emisora", placeholder="Ej: Gerencia Económico Financiera")
+with c2:
+    aprobacion_ref = st.text_input("Referencia de Aprobación", placeholder="Ej: Res (D) N° XXXXX")
+    edicion_num = st.text_input("Edición / Versión", value="1")
 
-    submitted = st.form_submit_button("📜 Generar Norma Oficial y Diagrama")
+st.subheader("2. Método de Entrada de Información")
+tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar / Subir Audio"])
+
+descripcion_libre = ""
+audio_bytes = None
+mime_type = None
+
+if tipo_entrada == "Escribir texto":
+    descripcion_libre = st.text_area(
+        "Describa los lineamientos, etapas, plazos o el proceso a normalizar:",
+        height=150,
+        placeholder="Ej: Describa las reglas para el otorgamiento de créditos..."
+    )
+else:
+    st.markdown("🔊 **Opción A: Grabar ahora en la PC** (Si la red lo permite, presione el ícono de micrófono)")
+    audio_grabado = audio_recorder(text="Presionar para grabar", recording_color="#e80000", neutral_color="#6aa36f", icon_size="2x")
+    
+    st.markdown("📂 **Opción B: Subir un archivo de voz** (Recomendado - Sube audios de WhatsApp, celular o grabadora)")
+    audio_subido = st.file_uploader("Suba un archivo de audio (.mp3, .wav, .m4a)", type=["wav", "mp3", "m4a", "ogg"])
+    
+    # Guardamos el archivo y su formato dependiendo de lo que elija el usuario
+    if audio_grabado:
+        audio_bytes = audio_grabado
+        mime_type = "audio/wav"
+        st.success("¡Audio grabado en vivo correctamente!")
+    elif audio_subido:
+        audio_bytes = audio_subido.read()
+        mime_type = audio_subido.type
+        st.success("¡Archivo de audio cargado correctamente!")
+
+# Botón dinámico de procesamiento
+submitted = st.button("📜 Generar Norma Oficial y Diagrama")
 
 if submitted:
     if not titulo_norma:
@@ -127,7 +127,7 @@ if submitted:
     elif tipo_entrada == "Escribir texto" and not descripcion_libre:
         st.error("Por favor, ingrese la descripción escrita del proceso.")
     elif tipo_entrada == "Grabar / Subir Audio" and not audio_bytes:
-        st.error("Por favor, grabe o suba un archivo de audio antes de enviar el formulario.")
+        st.error("Por favor, grabe o suba un archivo de audio antes de enviar la solicitud.")
     elif not api_key_input:
         st.error("Error de configuración: No se encontró la API Key en los secretos del sistema.")
     else:
