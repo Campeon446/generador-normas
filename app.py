@@ -225,19 +225,15 @@ if "norma_generada" in st.session_state:
     st.markdown("Representación gráfica basada en la normativa generada:")
     st.markdown(f"```mermaid\n{st.session_state['mermaid_generado']}\n```")
     
-    # --- NUEVO BOTÓN DE REINICIO QUE VACÍA TODO ---
+   # --- NUEVO BOTÓN DE REINICIO QUE VACÍA TODO ---
     st.divider()
-    if st.button("🔄 Comenzar Nuevo Procedimiento"):
-        # 1. Borramos los documentos y diagramas generados
-        for key in ["norma_generada", "mermaid_generado", "titulo_norma"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        
-        # 2. Forzamos que las cajas de texto queden totalmente en blanco
-        st.session_state["k_titulo"] = ""
-        st.session_state["k_area"] = ""
-        st.session_state["k_ref"] = ""
-        st.session_state["k_edicion"] = "1"
-        st.session_state["k_desc"] = ""
-        
-        st.rerun()
+    
+    def limpiar_todo():
+        # Lista de todas las memorias a borrar
+        claves = ["norma_generada", "mermaid_generado", "titulo_norma", "k_titulo", "k_area", "k_ref", "k_desc", "k_edicion"]
+        for clave in claves:
+            if clave in st.session_state:
+                del st.session_state[clave]
+                
+    # El botón ejecuta la función de limpieza y se recarga solo
+    st.button("🔄 Comenzar Nuevo Procedimiento", on_click=limpiar_todo)
