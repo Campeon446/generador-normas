@@ -224,3 +224,11 @@ if "norma_generada" in st.session_state:
     st.header("📊 Diagrama de Flujo del Procedimiento")
     st.markdown("Representación gráfica basada en la normativa generada:")
     st.markdown(f"```mermaid\n{st.session_state['mermaid_generado']}\n```")
+    
+    # --- NUEVO BOTÓN DE REINICIO ---
+    st.divider()
+    if st.button("🔄 Comenzar Nuevo Procedimiento"):
+        for key in ["norma_generada", "mermaid_generado", "titulo_norma"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
