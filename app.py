@@ -64,7 +64,7 @@ def crear_documento_word(texto_norma):
 # ==========================================
 # APLICACIÓN PRINCIPAL
 # ==========================================
-st.title("🏛️ Generador de Normas y Procedimientos con Exportación a Word")
+st.title("🏛️ Generador de Normas y Procedimientos")
 st.markdown("Describa el proceso mediante texto o voz. La IA generará la norma oficial y podrás descargarla directamente en Word.")
 
 with st.sidebar:
@@ -75,8 +75,9 @@ with st.sidebar:
         
     st.divider()
     st.header("Configuración de IA")
+    # Quitamos la caja de texto y cargamos la API directamente desde los Secretos que configuraste en la nube
+    st.success("✅ Conexión con Inteligencia Artificial activada de forma segura.")
     api_key_input = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
-    st.markdown("*(Obténgala gratis en Google AI Studio)*")
 
 with st.form("norma_form"):
     st.subheader("1. Datos Generales de la Norma")
@@ -89,22 +90,34 @@ with st.form("norma_form"):
         edicion_num = st.text_input("Edición / Versión", value="1")
     
     st.subheader("2. Método de Entrada de Información")
-    tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar audio con micrófono"])
+    tipo_entrada = st.radio("¿Cómo desea ingresar los detalles del procedimiento?", ["Escribir texto", "Grabar / Subir Audio"])
     
     descripcion_libre = ""
     audio_bytes = None
+    mime_type = None
     
     if tipo_entrada == "Escribir texto":
         descripcion_libre = st.text_area(
             "Describa los lineamientos, etapas, plazos o el proceso a normalizar:",
             height=150,
-            placeholder="Ej: Describa las reglas para el otorgamiento de créditos, plazos de pago..."
+            placeholder="Ej: Describa las reglas para el otorgamiento de créditos..."
         )
     else:
-        st.markdown("Presione el botón del micrófono para comenzar a hablar y vuelva a presionarlo para detener:")
-        audio_bytes = audio_recorder(text="Presione para grabar", recording_color="#e80000", neutral_color="#6aa36f", icon_size="2x")
-        if audio_bytes:
-            st.success("¡Audio grabado correctamente!")
+        st.markdown("🔊 **Opción A: Grabar ahora en la PC** (Si la red lo permite, presione el ícono de micrófono)")
+        audio_grabado = audio_recorder(text="Presionar para grabar", recording_color="#e80000", neutral_color="#6aa36f", icon_size="2x")
+        
+        st.markdown("📂 **Opción B: Subir un archivo de voz** (Recomendado - Sube audios de WhatsApp, celular o grabadora)")
+        audio_subido = st.file_uploader("Suba un archivo de audio (.mp3, .wav, .m4a)", type=["wav", "mp3", "m4a", "ogg"])
+        
+        # Guardamos el archivo y su formato dependiendo de lo que elija el usuario
+        if audio_grabado:
+            audio_bytes = audio_grabado
+            mime_type = "audio/wav"
+            st.success("¡Audio grabado en vivo correctamente!")
+        elif audio_subido:
+            audio_bytes = audio_subido.read()
+            mime_type = audio_subido.type
+            st.success("¡Archivo de audio cargado correctamente!")
 
     submitted = st.form_submit_button("📜 Generar Norma Oficial y Diagrama")
 
@@ -113,19 +126,19 @@ if submitted:
         st.error("Por favor, ingrese el Título de la Norma.")
     elif tipo_entrada == "Escribir texto" and not descripcion_libre:
         st.error("Por favor, ingrese la descripción escrita del proceso.")
-    elif tipo_entrada == "Grabar audio con micrófono" and not audio_bytes:
-        st.error("Por favor, grabe un audio antes de enviar el formulario.")
+    elif tipo_entrada == "Grabar / Subir Audio" and not audio_bytes:
+        st.error("Por favor, grabe o suba un archivo de audio antes de enviar el formulario.")
     elif not api_key_input:
-        st.error("Por favor, ingrese su API Key de Google Gemini en la barra lateral.")
+        st.error("Error de configuración: No se encontró la API Key en los secretos del sistema.")
     else:
         with st.spinner("Procesando información y generando la norma oficial..."):
             try:
                 client = genai.Client(api_key=api_key_input)
                 
-                if tipo_entrada == "Grabar audio con micrófono":
+                if tipo_entrada == "Grabar / Subir Audio":
                     contenido_prompt = [
                         {
-                            "mime_type": "audio/wav",
+                            "mime_type": mime_type,
                             "data": audio_bytes
                         },
                         f"Escucha este audio que describe un procedimiento. Redacta la norma titulada '{titulo_norma}' del área '{area_emisora}'."
@@ -160,13 +173,13 @@ if submitted:
                 (Aquí coloca únicamente el código puro para Mermaid empezando con flowchart TD).
                 """
                 
-                if tipo_entrada == "Grabar audio con micrófono":
+                if tipo_entrada == "Grabar / Subir Audio":
                     contents_to_send = [prompt_sistema, contenido_prompt[0], contenido_prompt[1]]
                 else:
                     contents_to_send = [prompt_sistema + "\n\n" + contenido_prompt]
 
                 response = client.models.generate_content(
-                    model='gemini-3.5-flash-lite',
+                    model='gemini-2.5-flash-lite',
                     contents=contents_to_send,
                 )
                 
